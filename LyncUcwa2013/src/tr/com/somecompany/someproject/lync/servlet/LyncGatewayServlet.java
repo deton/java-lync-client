@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.*;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -24,13 +25,18 @@ import tr.com.somecompany.someproject.lync.LyncConstants;
 
 @WebServlet(value = "/lyncGateway", loadOnStartup = 1)
 public class LyncGatewayServlet extends HttpServlet {
+	private static final Logger logger = Logger.getLogger("LyncGatewayServlet");
 
 	private static final long serialVersionUID = 8369129717173142132L;
 	private static LyncClient lyncClient;
 	private static ObjectMapper mapper;
+	private static final String username = LocalProperties.username;
+	private static final String encPassword = LocalProperties.encPassword;
 
 	private static final String QUERY_PARAM_SUBJECT = "subject";
 	private static final String QUERY_PARAM_MESSAGE = "message";
+	private static final String QUERY_PARAM_TO = "to";
+	private static final String QUERY_PARAM_PRESENCES = "presences";
 	private static final String QUERY_PARAM_SIP_FOR_PRESENCE = "sipForPresence";
 	private static final String QUERY_PARAM_SIP_FOR_SEARCH = "sipForSearch";
 	private static final String QUERY_PARAM_SIP_FOR_CONTACT_NOTE = "sipForContactNote";
@@ -39,7 +45,7 @@ public class LyncGatewayServlet extends HttpServlet {
 	static {
 		lyncClient = new LyncClient();
 		mapper = new ObjectMapper();
-		lyncClient.preapreClient();
+		lyncClient.preapreClient(username, encPassword);
 	}
 
 	@Override
@@ -47,11 +53,19 @@ public class LyncGatewayServlet extends HttpServlet {
 		Map<String, String> responseMap = new HashMap<String, String>();
 		String subject = request.getParameter(QUERY_PARAM_SUBJECT);
 		String message = request.getParameter(QUERY_PARAM_MESSAGE);
+		String to = request.getParameter(QUERY_PARAM_TO);
 
 		// start messaging
-		if (!StringUtils.isEmpty(subject) && !StringUtils.isEmpty(message))
-			startMessaging(subject, message, response, responseMap);
+		if (!StringUtils.isEmpty(subject) && !StringUtils.isEmpty(message) && !StringUtils.isEmpty(to)) {
+			startMessaging(subject, message, to, response, responseMap);
+		}
 
+		// query multiple presences
+		String presences = request.getParameter(QUERY_PARAM_PRESENCES);
+		if (!StringUtils.isEmpty(presences)) {
+			queryPresence(presences.split(","), response, responseMap);
+		}
+ 
 		// query presence
 		String sipForPresence = request.getParameter(QUERY_PARAM_SIP_FOR_PRESENCE);
 		if (!StringUtils.isEmpty(sipForPresence)) {
@@ -72,21 +86,21 @@ public class LyncGatewayServlet extends HttpServlet {
 		}
 	}
 
-	public void startMessaging(String subject, String message, HttpServletResponse response, Map<String, String> responseMap)
+	public void startMessaging(String subject, String message, String to, HttpServletResponse response, Map<String, String> responseMap)
 			throws ServletException, IOException {
 		response.setContentType("application/json");
 		try {
 			if (!lyncClient.peekAuthenticationMap()) {
 				String clientId = lyncClient.createApplication();
 				System.out.println("clientId: " + clientId);
-				responseMap = tryToSendMessage(subject, message);
+				responseMap = tryToSendMessage(subject, message, to);
 			} else {
 				synchronized (lyncClient) {
-					responseMap = tryToSendMessage(subject, message);
+					responseMap = tryToSendMessage(subject, message, to);
 					if (Integer.valueOf(responseMap.get("ResponseCode")) != LyncConstants.HTTP_RESPONSE_CODE_CREATED) {
 						lyncClient.removeTimedOutToken();
 						lyncClient.createApplication();
-						responseMap = tryToSendMessage(subject, message);
+						responseMap = tryToSendMessage(subject, message, to);
 					}
 				}
 			}
@@ -113,6 +127,32 @@ public class LyncGatewayServlet extends HttpServlet {
 						lyncClient.removeTimedOutToken();
 						lyncClient.createApplication();
 						responseMap = tryToQueryPresence(responseMap, sip);
+					}
+				}
+			}
+			mapper.writeValue(response.getOutputStream(), responseMap);
+		} catch (Exception e) {
+			responseMap.clear();
+			responseMap.put("Error", e.getMessage());
+			mapper.writeValue(response.getOutputStream(), responseMap);
+		}
+	}
+
+	public void queryPresence(String[] sips, HttpServletResponse response, Map<String, String> responseMap) throws JsonGenerationException,
+			JsonMappingException, IOException {
+		response.setContentType("application/json");
+		try {
+			if (!lyncClient.peekAuthenticationMap()) {
+				String clientId = lyncClient.createApplication();
+				logger.fine("clientId: " + clientId);
+				responseMap = tryToQueryPresence(responseMap, sips);
+			} else {
+				synchronized (lyncClient) {
+					responseMap = tryToQueryPresence(responseMap, sips);
+					if (Integer.valueOf(responseMap.get("ResponseCode")) != LyncConstants.HTTP_RESPONSE_CODE_OK) {
+						lyncClient.removeTimedOutToken();
+						lyncClient.createApplication();
+						responseMap = tryToQueryPresence(responseMap, sips);
 					}
 				}
 			}
@@ -204,9 +244,9 @@ public class LyncGatewayServlet extends HttpServlet {
 		}
 	}
 
-	public Map<String, String> tryToSendMessage(String subject, String message) {
+	public Map<String, String> tryToSendMessage(String subject, String message, String to) {
 		int responseCode = 500;
-		responseCode = lyncClient.sendMessage(subject, message);
+		responseCode = lyncClient.sendMessage(subject, message, to);
 		Map<String, String> responseMap = new HashMap<String, String>();
 		responseMap.put("Subject", subject);
 		responseMap.put("Message", message);
@@ -225,7 +265,23 @@ public class LyncGatewayServlet extends HttpServlet {
 			responseMap.put("ResponseCode", "200");
 		} catch (Exception e) {
 			responseMap.put("ResponseCode", "500");
-			e.printStackTrace();
+			logger.log(Level.WARNING, "", e);
+		}
+		return responseMap;
+	}
+
+	public Map<String, String> tryToQueryPresence(Map<String, String> responseMap, String[] sips) {
+		try {
+			// TODO: use batch (multipart) request
+			for (String sip : sips) {
+				JsonNode responseSearchJsonNode = lyncClient.doSearchRequest(sip);
+				String presenceText = lyncClient.doPresenceRequest(responseSearchJsonNode);
+				responseMap.put(sip, presenceText);
+			}
+			responseMap.put("ResponseCode", "200");
+		} catch (Exception e) {
+			responseMap.put("ResponseCode", "500");
+			logger.log(Level.WARNING, "", e);
 		}
 		return responseMap;
 	}
@@ -241,7 +297,7 @@ public class LyncGatewayServlet extends HttpServlet {
 			responseMap.put("ResponseCode", "200");
 		} catch (Exception e) {
 			responseMap.put("ResponseCode", "500");
-			e.printStackTrace();
+			logger.log(Level.WARNING, "", e);
 		}
 		return responseMap;
 	}
@@ -257,7 +313,7 @@ public class LyncGatewayServlet extends HttpServlet {
 			responseMap.put("ResponseCode", "200");
 		} catch (Exception e) {
 			responseMap.put("ResponseCode", "500");
-			e.printStackTrace();
+			logger.log(Level.WARNING, "", e);
 		}
 		return responseMap;
 	}
