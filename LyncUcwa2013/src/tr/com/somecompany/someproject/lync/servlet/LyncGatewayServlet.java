@@ -275,6 +275,10 @@ public class LyncGatewayServlet extends HttpServlet {
 			// TODO: use batch (multipart) request
 			for (String sip : sips) {
 				JsonNode responseSearchJsonNode = lyncClient.doSearchRequest(sip);
+				if (responseSearchJsonNode == null) { // maybe 401 Unauthorized
+					responseMap.put("ResponseCode", "404");
+					return responseMap;
+				}
 				String presenceText = lyncClient.doPresenceRequest(responseSearchJsonNode);
 				responseMap.put(sip, presenceText);
 			}

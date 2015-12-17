@@ -342,7 +342,7 @@ public final class LyncClient {
 
 			try {
 				response = httpclient.execute(httpget);
-				logger.fine(response.getStatusLine().toString().toString());
+				logger.fine(response.getStatusLine().toString());
 				setResponseData(httpOpWrapper, response, response.getStatusLine().getStatusCode());
 			} catch (HttpResponseException ex) {
 			}
@@ -382,7 +382,7 @@ public final class LyncClient {
 
 			response = httpclient.execute(httpget);
 			setResponseData(httpOpWrapper, response, response.getStatusLine().getStatusCode());
-			logger.fine(response.getStatusLine().toString().toString());
+			logger.fine(response.getStatusLine().toString());
 		} catch (ClientProtocolException e) {
 			logger.log(Level.WARNING, "", e);
 		} catch (IOException e) {
@@ -432,7 +432,7 @@ public final class LyncClient {
 			response = httpclient.execute(httpPost);
 			setResponseData(httpOpWrapper, response, response.getStatusLine().getStatusCode());
 
-			logger.fine(response.getStatusLine().toString().toString());
+			logger.fine(response.getStatusLine().toString());
 			printResponseHeaders(response);
 		} catch (UnsupportedEncodingException e) {
 			logger.log(Level.WARNING, "", e);
@@ -473,7 +473,7 @@ public final class LyncClient {
 
 			response = httpclient.execute(httpget);
 			setResponseData(httpOpWrapper, response, response.getStatusLine().getStatusCode());
-			logger.fine(response.getStatusLine().toString().toString());
+			logger.fine(response.getStatusLine().toString());
 		} catch (UnsupportedEncodingException e) {
 			logger.log(Level.WARNING, "", e);
 		} catch (ClientProtocolException e) {
@@ -527,7 +527,7 @@ public final class LyncClient {
 
 			response = httpclient.execute(httpPost);
 			setResponseData(httpOpWrapper, response, response.getStatusLine().getStatusCode());
-			logger.fine(response.getStatusLine().toString().toString());
+			logger.fine(response.getStatusLine().toString());
 			printResponseHeaders(response);
 			//logger.fine(httpOpWrapper.getResponseBody());
 		} catch (UnsupportedEncodingException e) {
@@ -699,7 +699,7 @@ public final class LyncClient {
 			printRequestHeaders(httpPost);
 
 			response = httpclient.execute(httpPost);
-			logger.fine(response.getStatusLine().toString().toString());
+			logger.fine(response.getStatusLine().toString());
 			setResponseData(httpOpWrapper, response, response.getStatusLine().getStatusCode());
 		} catch (UnsupportedEncodingException e) {
 			logger.log(Level.WARNING, "", e);
@@ -764,7 +764,11 @@ public final class LyncClient {
 
 				setRequestData(httpOpWrapper, httpget);
 				responseSearch = httpclient.execute(httpget);
-				logger.fine(responseSearch.getStatusLine().toString().toString());
+				if (responseSearch.getStatusLine().getStatusCode() != LyncConstants.HTTP_RESPONSE_CODE_OK) {
+					logger.info("doSearchRequest statusCode != 200: " + responseSearch.getStatusLine().toString());
+					return null;
+				}
+				logger.fine(responseSearch.getStatusLine().toString());
 				setResponseData(httpOpWrapper, responseSearch, responseSearch.getStatusLine().getStatusCode());
 
 				logger.fine(httpOpWrapper.getResponseBody());
@@ -773,6 +777,8 @@ public final class LyncClient {
 				logger.log(Level.WARNING, "", e);
 			} catch (ClientProtocolException e) {
 				logger.log(Level.WARNING, "", e);
+			} catch (org.codehaus.jackson.JsonParseException e) {
+				logger.log(Level.WARNING, httpOpWrapper.getResponseBody(), e);
 			} catch (IOException e) {
 				logger.log(Level.WARNING, "", e);
 			} finally {
@@ -791,34 +797,35 @@ public final class LyncClient {
 		String presenceText = "unknown";
 		try {
 			Iterator<JsonNode> iter = responseSearchJsonNode.get("_embedded").get("contact").getElements();
-			if (iter.hasNext()) {
-				JsonNode firstNode = iter.next();
-				String presenceUrl = firstNode.get("_links").get("contactPresence").get("href").getTextValue();
-
-				presenceUrl = lyncRegistryMap.get(LYNC_EXT_POOL_URL_KEY) + presenceUrl;
-				logger.fine("searchUrl:" + presenceUrl);
-
-				httpget = new HttpGet(presenceUrl);
-
-				httpget.setHeader(HttpHeaders.ACCEPT, "application/json");
-				httpget.setHeader(HttpHeaders.AUTHORIZATION, auth.getAccessToken());
-
-				logger.fine("\nREQUEST Presence: " + httpget.getURI());
-				logger.fine("----Request Headers----");
-				printRequestHeaders(httpget);
-
-				responsePresence = httpclient.execute(httpget);
-				logger.fine(responsePresence.getStatusLine().toString().toString());
-
-				printResponseHeaders(responsePresence);
-
-				String responsePresenceBody = readHttpEntityBody(responsePresence.getEntity().getContent());
-				logger.fine(responsePresenceBody);
-				JsonNode responsePresenceJsonNode = mapper.readTree(responsePresenceBody);
-
-				presenceText = responsePresenceJsonNode.get("availability").getTextValue();
-				logger.fine("presenceText:" + presenceText);
+			if (!iter.hasNext()) {
+				return "notfound";
 			}
+			JsonNode firstNode = iter.next();
+			String presenceUrl = firstNode.get("_links").get("contactPresence").get("href").getTextValue();
+
+			presenceUrl = lyncRegistryMap.get(LYNC_EXT_POOL_URL_KEY) + presenceUrl;
+			logger.fine("searchUrl:" + presenceUrl);
+
+			httpget = new HttpGet(presenceUrl);
+
+			httpget.setHeader(HttpHeaders.ACCEPT, "application/json");
+			httpget.setHeader(HttpHeaders.AUTHORIZATION, auth.getAccessToken());
+
+			logger.fine("\nREQUEST Presence: " + httpget.getURI());
+			logger.fine("----Request Headers----");
+			printRequestHeaders(httpget);
+
+			responsePresence = httpclient.execute(httpget);
+			logger.fine(responsePresence.getStatusLine().toString());
+
+			printResponseHeaders(responsePresence);
+
+			String responsePresenceBody = readHttpEntityBody(responsePresence.getEntity().getContent());
+			logger.fine(responsePresenceBody);
+			JsonNode responsePresenceJsonNode = mapper.readTree(responsePresenceBody);
+
+			presenceText = responsePresenceJsonNode.get("availability").getTextValue();
+			logger.fine("presenceText:" + presenceText);
 
 		} catch (UnsupportedEncodingException e) {
 			logger.log(Level.WARNING, "", e);
@@ -827,7 +834,9 @@ public final class LyncClient {
 		} catch (IOException e) {
 			logger.log(Level.WARNING, "", e);
 		} finally {
-			httpget.releaseConnection();
+			if (httpget != null) {
+				httpget.releaseConnection();
+			}
 		}
 		return presenceText;
 	}
