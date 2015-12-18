@@ -4,6 +4,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.*;
@@ -42,10 +43,17 @@ public class LyncGatewayServlet extends HttpServlet {
 	private static final String QUERY_PARAM_SIP_FOR_CONTACT_NOTE = "sipForContactNote";
 	private static final String QUERY_PARAM_SIP_FOR_CONTACT_PHOTO = "sipForContactPhoto";
 
+	Map<String, String> presenceUrlCache;
+
 	static {
 		lyncClient = new LyncClient();
 		mapper = new ObjectMapper();
 		lyncClient.preapreClient(username, encPassword);
+	}
+
+	public LyncGatewayServlet() {
+		super();
+		presenceUrlCache = Collections.synchronizedMap(new HashMap<String, String>());
 	}
 
 	@Override
@@ -270,16 +278,34 @@ public class LyncGatewayServlet extends HttpServlet {
 		return responseMap;
 	}
 
+	String searchPresenceUrl(String sip) {
+		String presenceUrl = presenceUrlCache.get(sip);
+		if (presenceUrl != null) {
+			return presenceUrl;
+		}
+		JsonNode responseSearchJsonNode = lyncClient.doSearchRequest(sip);
+		if (responseSearchJsonNode == null) { // maybe 401 Unauthorized
+			presenceUrlCache.clear();
+			return null;
+		}
+		presenceUrl = lyncClient.getPresenceUrl(responseSearchJsonNode);
+		if (presenceUrl == null) {
+			return null;
+		}
+		presenceUrlCache.put(sip, presenceUrl);
+		return presenceUrl;
+	}
+
 	public Map<String, String> tryToQueryPresence(Map<String, String> responseMap, String[] sips) {
 		try {
 			// TODO: use batch (multipart) request
 			for (String sip : sips) {
-				JsonNode responseSearchJsonNode = lyncClient.doSearchRequest(sip);
-				if (responseSearchJsonNode == null) { // maybe 401 Unauthorized
+				String presenceUrl = searchPresenceUrl(sip);
+				if (presenceUrl == null) { // maybe 401 Unauthorized
 					responseMap.put("ResponseCode", "404");
 					return responseMap;
 				}
-				String presenceText = lyncClient.doPresenceRequest(responseSearchJsonNode);
+				String presenceText = lyncClient.doPresenceRequest(presenceUrl);
 				responseMap.put(sip, presenceText);
 			}
 			responseMap.put("ResponseCode", "200");

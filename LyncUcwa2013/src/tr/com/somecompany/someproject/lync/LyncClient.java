@@ -790,19 +790,34 @@ public final class LyncClient {
 		return responseSearchJsonNode;
 	}
 
+	public String getPresenceUrl(JsonNode responseSearchJsonNode) {
+		Iterator<JsonNode> iter = null;
+		try {
+			iter = responseSearchJsonNode.get("_embedded").get("contact").getElements();
+		} catch (NullPointerException ex) {
+			return null;
+		}
+		if (iter == null || !iter.hasNext()) {
+			return null;
+		}
+		JsonNode firstNode = iter.next();
+		return firstNode.get("_links").get("contactPresence").get("href").getTextValue();
+	}
+
 	public String doPresenceRequest(JsonNode responseSearchJsonNode) {
+		String presenceUrl = getPresenceUrl(responseSearchJsonNode);
+		return doPresenceRequest(presenceUrl);
+	}
+
+	public String doPresenceRequest(String presenceUrl) {
+		if (presenceUrl == null) {
+			return "notfound";
+		}
 		LyncAuthentication auth = getAuthentication();
 		HttpGet httpget = null;
 		HttpResponse responsePresence = null;
 		String presenceText = "unknown";
 		try {
-			Iterator<JsonNode> iter = responseSearchJsonNode.get("_embedded").get("contact").getElements();
-			if (!iter.hasNext()) {
-				return "notfound";
-			}
-			JsonNode firstNode = iter.next();
-			String presenceUrl = firstNode.get("_links").get("contactPresence").get("href").getTextValue();
-
 			presenceUrl = lyncRegistryMap.get(LYNC_EXT_POOL_URL_KEY) + presenceUrl;
 			logger.fine("searchUrl:" + presenceUrl);
 
