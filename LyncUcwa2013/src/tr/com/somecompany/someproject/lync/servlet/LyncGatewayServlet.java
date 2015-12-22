@@ -306,7 +306,7 @@ public class LyncGatewayServlet extends HttpServlet {
 					return responseMap;
 				}
 				String presenceText = lyncClient.doPresenceRequest(presenceUrl);
-				if (presenceText.equals("unknown")) {
+				if (presenceText == null) {
 					responseMap.put("ResponseCode", "500");
 					return responseMap;
 				}

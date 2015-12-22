@@ -811,7 +811,7 @@ public final class LyncClient {
 
 	public String doPresenceRequest(String presenceUrl) {
 		if (presenceUrl == null) {
-			return "notfound";
+			return null;
 		}
 		LyncAuthentication auth = getAuthentication();
 		HttpGet httpget = null;
@@ -820,7 +820,7 @@ public final class LyncClient {
 		String responsePresenceBody = null;
 		try {
 			presenceUrl = lyncRegistryMap.get(LYNC_EXT_POOL_URL_KEY) + presenceUrl;
-			logger.fine("searchUrl:" + presenceUrl);
+			logger.fine("presenceUrl:" + presenceUrl);
 
 			httpget = new HttpGet(presenceUrl);
 
@@ -832,6 +832,10 @@ public final class LyncClient {
 			printRequestHeaders(httpget);
 
 			responsePresence = httpclient.execute(httpget);
+			if (responsePresence.getStatusLine().getStatusCode() != LyncConstants.HTTP_RESPONSE_CODE_OK) {
+				logger.info("doPresenceRequest statusCode != 200: " + responsePresence.getStatusLine().toString());
+				return null;
+			}
 			logger.fine(responsePresence.getStatusLine().toString());
 
 			printResponseHeaders(responsePresence);
@@ -848,8 +852,6 @@ public final class LyncClient {
 		} catch (ClientProtocolException e) {
 			logger.log(Level.WARNING, "", e);
 		} catch (org.codehaus.jackson.JsonParseException e) {
-			logger.log(Level.WARNING, responsePresenceBody, e);
-		} catch (NullPointerException e) {
 			logger.log(Level.WARNING, responsePresenceBody, e);
 		} catch (IOException e) {
 			logger.log(Level.WARNING, "", e);
