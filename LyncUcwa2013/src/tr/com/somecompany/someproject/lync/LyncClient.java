@@ -817,6 +817,7 @@ public final class LyncClient {
 		HttpGet httpget = null;
 		HttpResponse responsePresence = null;
 		String presenceText = "unknown";
+		String responsePresenceBody = null;
 		try {
 			presenceUrl = lyncRegistryMap.get(LYNC_EXT_POOL_URL_KEY) + presenceUrl;
 			logger.fine("searchUrl:" + presenceUrl);
@@ -835,7 +836,7 @@ public final class LyncClient {
 
 			printResponseHeaders(responsePresence);
 
-			String responsePresenceBody = readHttpEntityBody(responsePresence.getEntity().getContent());
+			responsePresenceBody = readHttpEntityBody(responsePresence.getEntity().getContent());
 			logger.fine(responsePresenceBody);
 			JsonNode responsePresenceJsonNode = mapper.readTree(responsePresenceBody);
 
@@ -846,6 +847,10 @@ public final class LyncClient {
 			logger.log(Level.WARNING, "", e);
 		} catch (ClientProtocolException e) {
 			logger.log(Level.WARNING, "", e);
+		} catch (org.codehaus.jackson.JsonParseException e) {
+			logger.log(Level.WARNING, responsePresenceBody, e);
+		} catch (NullPointerException e) {
+			logger.log(Level.WARNING, responsePresenceBody, e);
 		} catch (IOException e) {
 			logger.log(Level.WARNING, "", e);
 		} finally {
