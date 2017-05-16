@@ -35,8 +35,11 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
@@ -44,8 +47,7 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.params.ClientPNames;
-import org.apache.http.client.params.CookiePolicy;
+import org.apache.http.conn.params.ConnRoutePNames;
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLSocketFactory;
@@ -109,7 +111,7 @@ public final class LyncClient {
 		mapper = new ObjectMapper();
 	}
 
-	public void preapreClient(String username, String encPassword) {
+	public void preapreClient(String username, String encPassword, String proxyHost, int proxyPort, String proxyUser, String proxyPassword) {
 		lyncRegistryMap.put(LYNC_DISCOVERY_URL_KEY, getDiscoveryUrl(username));
 		lyncRegistryMap.put(LYNC_USERNAME_KEY, username);
 		lyncRegistryMap.put(LYNC_ENCPASSWORD_KEY, encPassword);
@@ -143,6 +145,15 @@ public final class LyncClient {
 
 			httpclient = new DefaultHttpClient(conMan);
 			//httpclient.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.IGNORE_COOKIES);
+			if (proxyHost != null) {
+				HttpHost proxy = new HttpHost(proxyHost, proxyPort);
+				httpclient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+				if (proxyUser != null) {
+					((DefaultHttpClient)httpclient).getCredentialsProvider().setCredentials(
+							new AuthScope(proxy),
+							new UsernamePasswordCredentials(proxyUser, proxyPassword));
+				}
+			}
 		} catch (NoSuchAlgorithmException nsae) {
 			logger.log(Level.WARNING, "", nsae);
 		} catch (KeyManagementException kme) {

@@ -33,6 +33,10 @@ public class LyncGatewayServlet extends HttpServlet {
 	private static ObjectMapper mapper;
 	private static final String username = LocalProperties.username;
 	private static final String encPassword = LocalProperties.encPassword;
+	private static final String proxyHost = LocalProperties.proxyHost;
+	private static final int proxyPort = LocalProperties.proxyPort;
+	private static final String proxyUser = LocalProperties.proxyUser;
+	private static final String proxyPassword = LocalProperties.proxyPassword;
 
 	private static final String QUERY_PARAM_SUBJECT = "subject";
 	private static final String QUERY_PARAM_MESSAGE = "message";
@@ -48,7 +52,7 @@ public class LyncGatewayServlet extends HttpServlet {
 	static {
 		lyncClient = new LyncClient();
 		mapper = new ObjectMapper();
-		lyncClient.preapreClient(username, encPassword);
+		lyncClient.preapreClient(username, encPassword, proxyHost, proxyPort, proxyUser, proxyPassword);
 	}
 
 	public LyncGatewayServlet() {
